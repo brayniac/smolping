@@ -75,7 +75,7 @@ fn main() {
     let dstip = IpAddress::from_str(&matches.opt_str("dstip").unwrap()).unwrap();
     let dstport = u16::from_str(&matches.opt_str("dstport").unwrap()).unwrap();
 
-    let device = RawSocket::new(ifname.as_ref()).unwrap();
+    let device = TapInterface::new(ifname.as_ref()).unwrap();
 
     let startup_time = Instant::now();
 
@@ -102,6 +102,16 @@ fn main() {
 
     let mut tcp_active = false;
     let mut waiting = false;
+
+    let mut buffer = Vec::<u8>::with_capacity(4096);
+
+    let msg = "PING\r\n".to_owned();
+    let msg_bytes = msg.as_bytes();
+    let mut pointer = 0;
+
+    let rsp = "PONG\r\n".to_owned();
+    let rsp_bytes = rsp.as_bytes();
+
     loop {
         {
             let socket: &mut TcpSocket = sockets.get_mut(tcp_handle).as_socket();
@@ -115,25 +125,29 @@ fn main() {
 
             if socket.may_recv() {
                 if waiting {
-                    let data = {
-                        let mut data = socket.recv(128).unwrap().to_owned();
-                        if data.len() > 0 {
-                            debug!("recv data: {:?}",
-                                   str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)"));
-                            data = data.split(|&b| b == b'\n').collect::<Vec<_>>().concat();
-                            data.reverse();
-                            data.extend(b"\n");
-                        }
-                        data
-                    };
-                    if data == "PONG\r\n".to_owned().as_bytes() {
+                    let data = socket.recv(128).unwrap().to_owned();
+                    if data == rsp_bytes {
                         waiting = false;
+                        debug!("recv: PONG");
+                    } else {
+                        buffer.extend_from_slice(&data[0..data.len()]);
+                        if buffer == "PONG\r\n".to_owned().as_bytes() {
+                            waiting = false;
+                            buffer.clear();
+                            debug!("recvv: PONG");
+                        } else {
+                            debug!("buffer has: {}", str::from_utf8(buffer.as_ref()).unwrap_or("(invalid utf8)"))
+                        }
+                        
                     }
                 } else {
-                    let data = "PING\r\n".to_owned();
-                    if socket.can_send() && data.len() > 0 {
-                        debug!("send data: {:?}", data);
-                        socket.send_slice(&data.as_bytes()).unwrap();
+                    let mut buffer = socket.send(6 - pointer).unwrap();
+                    for i in 0..buffer.len() {
+                        buffer[i] = msg_bytes[pointer];
+                        pointer += 1;
+                    } if pointer >= msg_bytes.len() {
+                        pointer = 0;
+                        waiting = true;
                     }
                 }
             } else if socket.may_send() {
