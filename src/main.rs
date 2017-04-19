@@ -136,16 +136,18 @@ fn main() {
                             buffer.clear();
                             debug!("recvv: PONG");
                         } else {
-                            debug!("buffer has: {}", str::from_utf8(buffer.as_ref()).unwrap_or("(invalid utf8)"))
+                            debug!("buffer has: {}",
+                                   str::from_utf8(buffer.as_ref()).unwrap_or("(invalid utf8)"))
                         }
-                        
+
                     }
                 } else {
                     let mut buffer = socket.send(6 - pointer).unwrap();
                     for i in 0..buffer.len() {
                         buffer[i] = msg_bytes[pointer];
                         pointer += 1;
-                    } if pointer >= msg_bytes.len() {
+                    }
+                    if pointer >= msg_bytes.len() {
                         pointer = 0;
                         waiting = true;
                     }
