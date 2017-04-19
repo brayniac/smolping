@@ -6,18 +6,18 @@ extern crate smoltcp;
 
 mod logging;
 
+use getopts::Options;
+use logging::set_log_level;
+use smoltcp::Error;
+use smoltcp::iface::{ArpCache, EthernetInterface, SliceArpCache};
+use smoltcp::phy::{Device, RawSocket, TapInterface};
+use smoltcp::socket::{AsSocket, SocketSet};
+use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
+use smoltcp::wire::{EthernetAddress, IpAddress};
+use smoltcp::wire::{EthernetFrame, EthernetProtocol, PrettyPrinter};
 use std::env;
 use std::str::{self, FromStr};
 use std::time::Instant;
-use smoltcp::Error;
-use smoltcp::phy::{Device, RawSocket, TapInterface};
-use smoltcp::iface::{ArpCache, SliceArpCache, EthernetInterface};
-use smoltcp::wire::{PrettyPrinter, EthernetFrame, EthernetProtocol};
-use smoltcp::wire::{EthernetAddress, IpAddress};
-use smoltcp::socket::{AsSocket, SocketSet};
-use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
-use getopts::Options;
-use logging::set_log_level;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const PROGRAM: &'static str = env!("CARGO_PKG_NAME");
