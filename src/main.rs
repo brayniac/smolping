@@ -10,11 +10,11 @@ use getopts::Options;
 use logging::set_log_level;
 use smoltcp::Error;
 use smoltcp::iface::{ArpCache, EthernetInterface, SliceArpCache};
-use smoltcp::phy::{Device, RawSocket, TapInterface};
+use smoltcp::phy::TapInterface;
 use smoltcp::socket::{AsSocket, SocketSet};
 use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
 use smoltcp::wire::{EthernetAddress, IpAddress};
-use smoltcp::wire::{EthernetFrame, EthernetProtocol, PrettyPrinter};
+
 use std::env;
 use std::str::{self, FromStr};
 use std::time::Instant;
@@ -22,7 +22,7 @@ use std::time::Instant;
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const PROGRAM: &'static str = env!("CARGO_PKG_NAME");
 
-fn print_usage(program: &str, opts: Options) {
+fn print_usage(program: &str, opts: &Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
 }
@@ -58,7 +58,7 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        print_usage(program, opts);
+        print_usage(program, &opts);
         return;
     }
 
@@ -142,9 +142,9 @@ fn main() {
 
                     }
                 } else {
-                    let mut buffer = socket.send(6 - pointer).unwrap();
-                    for i in 0..buffer.len() {
-                        buffer[i] = msg_bytes[pointer];
+                    let buffer = socket.send(6 - pointer).unwrap();
+                    for byte in buffer {
+                        *byte = msg_bytes[pointer];
                         pointer += 1;
                     }
                     if pointer >= msg_bytes.len() {
