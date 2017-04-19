@@ -10,7 +10,7 @@ use std::env;
 use std::str::{self, FromStr};
 use std::time::Instant;
 use smoltcp::Error;
-use smoltcp::phy::{Device, RawSocket};
+use smoltcp::phy::{Device, RawSocket, TapInterface};
 use smoltcp::iface::{ArpCache, SliceArpCache, EthernetInterface};
 use smoltcp::wire::{PrettyPrinter, EthernetFrame, EthernetProtocol};
 use smoltcp::wire::{EthernetAddress, IpAddress};
@@ -30,7 +30,10 @@ fn print_usage(program: &str, opts: Options) {
 fn opts() -> Options {
     let mut opts = Options::new();
     opts.optopt("i", "interface", "name of ethernet interface", "[IFNAME]");
-    opts.optopt("", "hwaddr", "MAC address of ethernet interface", "[HWADDR]");
+    opts.optopt("",
+                "hwaddr",
+                "MAC address of ethernet interface",
+                "[HWADDR]");
     opts.optopt("", "srcip", "ip address", "[IPADDR]");
     opts.optopt("", "srcport", "tcp port", "[PORT]");
     opts.optopt("", "dstip", "ip address", "[IPADDR]");
@@ -43,7 +46,7 @@ fn opts() -> Options {
 }
 
 fn main() {
-	let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     let program = &args[0];
     let opts = opts();
 
@@ -82,19 +85,23 @@ fn main() {
     let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; 128]);
     let tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
 
-    let mut iface      = EthernetInterface::new(
-        Box::new(device), Box::new(arp_cache) as Box<ArpCache>,
-        hwaddr, [srcip]);
+    let mut iface = EthernetInterface::new(Box::new(device),
+                                           Box::new(arp_cache) as Box<ArpCache>,
+                                           hwaddr,
+                                           [srcip]);
 
     let mut sockets = SocketSet::new(vec![]);
     let tcp_handle = sockets.add(tcp_socket);
 
     {
         let socket: &mut TcpSocket = sockets.get_mut(tcp_handle).as_socket();
-        socket.connect((dstip, dstport), (srcip, srcport)).unwrap();
+        socket
+            .connect((dstip, dstport), (srcip, srcport))
+            .unwrap();
     }
 
     let mut tcp_active = false;
+    let mut waiting = false;
     loop {
         {
             let socket: &mut TcpSocket = sockets.get_mut(tcp_handle).as_socket();
@@ -102,26 +109,32 @@ fn main() {
                 debug!("connected");
             } else if !socket.is_active() && tcp_active {
                 debug!("disconnected");
-                break
+                break;
             }
             tcp_active = socket.is_active();
 
             if socket.may_recv() {
-                let data = {
-                    let mut data = socket.recv(128).unwrap().to_owned();
-                    if data.len() > 0 {
-                        debug!("recv data: {:?}",
-                               str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)"));
-                        data = data.split(|&b| b == b'\n').collect::<Vec<_>>().concat();
-                        data.reverse();
-                        data.extend(b"\n");
+                if waiting {
+                    let data = {
+                        let mut data = socket.recv(128).unwrap().to_owned();
+                        if data.len() > 0 {
+                            debug!("recv data: {:?}",
+                                   str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)"));
+                            data = data.split(|&b| b == b'\n').collect::<Vec<_>>().concat();
+                            data.reverse();
+                            data.extend(b"\n");
+                        }
+                        data
+                    };
+                    if data == "PONG\r\n".to_owned().as_bytes() {
+                        waiting = false;
                     }
-                    data
-                };
-                if socket.can_send() && data.len() > 0 {
-                    debug!("send data: {:?}",
-                           str::from_utf8(data.as_ref()).unwrap_or("(invalid utf8)"));
-                    socket.send_slice(&data[..]).unwrap();
+                } else {
+                    let data = "PING\r\n".to_owned();
+                    if socket.can_send() && data.len() > 0 {
+                        debug!("send data: {:?}", data);
+                        socket.send_slice(&data.as_bytes()).unwrap();
+                    }
                 }
             } else if socket.may_send() {
                 debug!("close");
@@ -134,7 +147,7 @@ fn main() {
                            (timestamp.subsec_nanos() / 1000000) as u64;
         match iface.poll(&mut sockets, timestamp_ms) {
             Ok(()) | Err(Error::Exhausted) => (),
-            Err(e) => debug!("poll error: {}", e)
+            Err(e) => debug!("poll error: {}", e),
         }
     }
 }

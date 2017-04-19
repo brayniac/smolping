@@ -35,7 +35,7 @@ pub fn set_log_level(level: usize) {
         }
     }
     let _ = log::set_logger(|max_log_level| {
-        max_log_level.set(log_filter);
-        Box::new(SimpleLogger)
-    });
+                                max_log_level.set(log_filter);
+                                Box::new(SimpleLogger)
+                            });
 }
